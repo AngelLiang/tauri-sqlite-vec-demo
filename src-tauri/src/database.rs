@@ -28,28 +28,40 @@ pub fn initialize_database(app_handle: &AppHandle) -> Result<Connection, rusqlit
         "CREATE VIRTUAL TABLE vec_items USING vec0(embedding float[4])",
         [],
     )?;
+
+    // 插入向量数据
     let mut stmt = db.prepare("INSERT INTO vec_items(rowid, embedding) VALUES (?, ?)")?;
-    for item in items {
+    for item in items.clone() {
         stmt.execute(rusqlite::params![item.0, item.1.as_bytes()])?;
     }
     drop(stmt);
 
+    // 更新向量数据
+    let mut stmt = db.prepare("UPDATE vec_items SET embedding=? WHERE rowid=?")?;
+    let item: Vec<f32> = vec![0.14, 0.14, 0.14, 0.14];
+    stmt.execute(rusqlite::params![item.as_bytes(), 4])?;
+    drop(stmt);
+
+    // 删除向量数据
+    let mut stmt = db.prepare("DELETE FROM vec_items WHERE rowid=?")?;
+    stmt.execute(rusqlite::params![5])?;
+    drop(stmt);
+
     let query: Vec<f32> = vec![0.3, 0.3, 0.3, 0.3];
+    println!("length {}", query.as_bytes().len());
     let result: Vec<(i64, f64)> = db
         .prepare(
             r"
-          SELECT
-            rowid,
-            distance
+          SELECT rowid, distance
           FROM vec_items
           WHERE embedding MATCH ?1
+            AND k = 10
           ORDER BY distance
-          LIMIT 3
         ",
         )?
         .query_map([query.as_bytes()], |r| Ok((r.get(0)?, r.get(1)?)))?
         .collect::<Result<Vec<_>, _>>()?;
-    println!("{:?}", result);
+    println!("result: {:?}", result);
 
     Ok(db)
 }
